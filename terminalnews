@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import json
+import argparse
+import urllib.request
+import urllib.error
+from typing import Optional
+
+def fetch_news(api_key: str, category: str = "general", articles: int = 5) -> dict:
+    """Fetch news from NewsAPI"""
+    url = f"https://newsapi.org/v2/top-headlines?country=us&category={category}&pageSize={articles}&apiKey={api_key}"
+    
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = response.read()
+            # Clean control characters from the response
+            cleaned_data = ''.join(char if ord(char) >= 32 or char in '\n\t' else ' ' for char in data.decode('utf-8'))
+            return json.loads(cleaned_data)
+    except urllib.error.HTTPError as e:
+        return {"status": "error", "message": f"HTTP Error {e.code}: {e.reason}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def display_article(article: dict, index: int) -> None:
+    """Display a single article with formatting"""
+    title = article.get('title', 'No title')
+    source = article.get('source', {}).get('name', 'Unknown')
+    description = article.get('description', 'No description available')
+    url = article.get('url', 'No URL')
+    
+    # Truncate description if too long
+    if len(description) > 200:
+        description = description[:197] + '...'
+    
+    # Colors for terminal
+    YELLOW = '\033[1;33m'
+    CYAN = '\033[36m'
+    BLUE = '\033[34m'
+    RESET = '\033[0m'
+    GRAY = '\033[90m'
+    
+    print(f"\n{YELLOW}📰 [{index}] {title}{RESET}")
+    print(f"   {CYAN}Source:{RESET} {source}")
+    print(f"   {CYAN}Description:{RESET} {description}")
+    print(f"   {BLUE}🔗 URL:{RESET} {url}")
+    print(f"   {GRAY}{'─' * 60}{RESET}")
+
+def main():
+    parser = argparse.ArgumentParser(description='Fetch and display news from NewsAPI')
+    parser.add_argument('-c', '--category', default='general',
+                        choices=['business', 'entertainment', 'general', 'health', 
+                                'science', 'sports', 'technology'],
+                        help='News category (default: general)')
+    parser.add_argument('-n', '--number', type=int, default=5,
+                        help='Number of articles to display (default: 5)')
+    
+    args = parser.parse_args()
+    
+    # Get API key from environment
+    api_key = os.environ.get('NEWS_API_KEY')
+    if not api_key:
+        print("Error: NEWS_API_KEY environment variable is not set")
+        print("Add this to your ~/.zshrc file:")
+        print('export NEWS_API_KEY="your_api_key"')
+        print("\nOr set it temporarily with:")
+        print('export NEWS_API_KEY="your_api_key"')
+        sys.exit(1)
+    
+    # Fetch news
+    print(f"\033[36mFetching news...\033[0m")
+    data = fetch_news(api_key, args.category, args.number)
+    
+    # Check for errors
+    if data.get('status') != 'ok':
+        print(f"Error: {data.get('message', 'Unknown error')}")
+        sys.exit(1)
+    
+    # Display header
+    GREEN = '\033[1;32m'
+    RESET = '\033[0m'
+    print(f"\n{GREEN}═══ Top {args.number} news articles in category: {args.category} ═══{RESET}")
+    
+    # Display articles
+    articles = data.get('articles', [])
+    for i, article in enumerate(articles[:args.number], 1):
+        display_article(article, i)
+    
+    # Display footer
+    total = data.get('totalResults', 0)
+    print(f"\n\033[36mShowing {min(args.number, len(articles))} of {total} available articles\033[0m")
+    print(f"\033[36m{'═' * 60}\033[0m")
+
+if __name__ == '__main__':
+    main()
